@@ -1,12 +1,21 @@
 import requests
 from bs4 import BeautifulSoup
 import re
+import time
+import sys
+
+def progress_bar(page, cnt):    
+    print('\r', end='')
+    print(f'Page {page} progress {cnt}/21', '*'*cnt, end='')
+    sys.stdout.flush()
+    time.sleep(0.05)
 
 base_url = "https://kox.moe/l/--/{page}.htm"
-manga_list = []
+
+f = open('url_list.txt', 'a+')
 
 # 遍历所有列表页，从1到932
-for page in range(1, 2):
+for page in range(1, 1000):
     url = base_url.format(page=page)
     response = requests.get(url)
     soup = BeautifulSoup(response.text, "html.parser")
@@ -15,13 +24,19 @@ for page in range(1, 2):
     scripts = soup.find_all("script", string=re.compile("https://kox.moe/c/"))
     pattern = re.compile(r'disp_divinfo\s*\(.*?"(https://kox\.moe/c/[\w-]+\.htm)"', re.DOTALL)
 
+    if not scripts:
+        break
+    
+    book_cnt = 0
     for script in scripts:
         # 提取漫画网址
         match = pattern.search(script.string)
         if match:
             manga_url = match.group(1)  # 漫画详情页URL
-            manga_list.append(manga_url)
+            book_cnt += 1
+            progress_bar(page=page, cnt=book_cnt)
+            f.write(manga_url+'\n')
+    print('\n', end='')
+    time.sleep(1)
 
-# 输出所有爬取的漫画名称和评分
-for manga in manga_list:
-    print(manga)
+f.close()
