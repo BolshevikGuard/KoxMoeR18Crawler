@@ -11,7 +11,7 @@ def progress_bar(page, cnt):
     sys.stdout.flush()
     time.sleep(0.05)
 
-mirror_switch = True # False:kox.moe True:volmoe.com
+mirror_switch = False # False:kox.moe True:volmoe.com
 
 user_agent = [
     # Opera
@@ -93,18 +93,21 @@ user_agent = [
 
 ]
 
+
 if not mirror_switch:
-    base_url = "https://kox.moe/l/--/{page}.htm"
+    base_url = "https://kox.moe/l/all,日本,all,newadd,chn,all,BL,0,0/{page}.htm"
 else:
     base_url = "https://volmoe.com/l/--/{page}.htm"
-header = {'User-Agent': random.choice(user_agent)}
+header = {'User-Agent': random.choice(user_agent),
+          'Cookie': ''
+          }
 
-f = open('url_list_1.txt', 'a+')
+f = open('url_list_yh2.txt', 'a+')
 
-# 遍历所有列表页，从1到932
-for page in range(878, 1000):
-    url = base_url.format(page=page, headers=header)
-    response = requests.get(url)
+# 遍历所有列表页，从1到726
+for page in range(1, 1000):
+    url = base_url.format(page=page)
+    response = requests.get(url, headers=header)
     soup = BeautifulSoup(response.text, "html.parser")
 
     # 找到所有的 <script> 标签，里面包含漫画的网址
@@ -129,6 +132,8 @@ for page in range(878, 1000):
             progress_bar(page=page, cnt=book_cnt)
             f.write(manga_url+'\n')
     print('\n', end='')
-    time.sleep(random.uniform(0.5, 1))
+    time.sleep(random.uniform(0.5, 2))
+
+    response.close()
 
 f.close()
