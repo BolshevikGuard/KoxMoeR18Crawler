@@ -2,17 +2,14 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import random
-import sys
 import time
 
 # 目标网址加载
 urls = []
-with open('url_list_1.txt', 'r', encoding='utf-8') as f:
+with open('url_list_yh2.txt', 'r', encoding='utf-8') as f:
     for idx, line in enumerate(f):
         urls.append(line.strip())
-        print('\r', end='')
-        print(f'{idx+1} urls loaded', end='')
-        # time.sleep(0.001)
+        print(f'\r{idx+1} URLs loaded', end='', flush=True)
 
 print('\n', end='')
 
@@ -93,53 +90,85 @@ user_agent = [
     "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36",
 
     "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.106 Safari/537.36"
+
 ]
+cookie = ""
 
 # 发送请求
 start_idx = 0
 r18_cnt = 0
 r15_cnt = 0
+
 with open('output.txt', 'a+', encoding='utf-8') as f:
-    for idx, url in enumerate(urls):
-        if idx < start_idx:
+    i = start_idx
+
+    while i < len(urls):
+        url = urls[i]
+        
+        try_times = 3
+        
+        while try_times > 0:
+            try:
+                headers = {"User-Agent": random.choice(user_agent), 
+                        #    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+                        #    "Accept-Encoding": "gzip, deflate, br, zstd",
+                        #    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6",
+                           "Referer": "https://kox.moe/",
+                           "Cookie": cookie, 
+                           }
+                response = requests.get(url, headers=headers, timeout=5, allow_redirects=False)
+                if response.status_code in [403, 429]:
+                    time.sleep(5)
+                    try_times -= 1
+                    continue
+                break
+            except requests.RequestException as e:
+                time.sleep(5)
+                try_times -= 1
+        
+        if try_times == 0:
+            with open('fails.txt', 'a+') as ff:
+                ff.write(f'{url}\n')
+            i += 1
             continue
 
-        headers = {"User-Agent": random.choice(user_agent)}
-        response = requests.get(url, headers=headers)
+        # **解析 HTML**
+        soup = BeautifulSoup(response.text, "html.parser")
 
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, "html.parser")
+        # 提取评分
+        score_tag = soup.find("table", class_="book_score")
+        score = None
+        if score_tag:
+            font_tag = score_tag.find("font", style=re.compile("font-size"))
+            if font_tag:
+                score = font_tag.text.strip()
+        else:
+            print(f'\nNo.{i} might be redirected!') # 遇到过被重定向至google的情况
+            break
 
-            # 提取评分
-            score_tag = soup.find("table", class_="book_score")
-            score = None
-            if score_tag:
-                font_tag = score_tag.find("font", style=re.compile("font-size"))
-                if font_tag:
-                    score = font_tag.text.strip()
+        # 提取漫画名称
+        title = None
+        meta_tag = soup.find("meta", {"name": "keywords"})
+        if meta_tag:
+            title = meta_tag["content"].split(",")[0]  # 取第一个关键词作为名称
 
-            # 提取漫画名称
-            title = None
-            meta_tag = soup.find("meta", {"name": "keywords"})
-            if meta_tag:
-                title = meta_tag["content"].split(",")[0]  # 取第一个关键词作为名称
+        # 提取 R15 / R18 分类
+        script_tag = soup.find("script", string=re.compile(r"var is_r18\s*=\s*parseInt"))
+        category = None
+        if script_tag:
+            match = re.search(r"var is_r18\s*=\s*parseInt\(\s*\"(\d+)\"\s*\)", script_tag.text)
+            if match:
+                category = int(match.group(1))
 
-            # 提取 R15 / R18 分类
-            script_tag = soup.find("script", string=re.compile(r"var is_r18\s*=\s*parseInt"))
-            category = None
-            if script_tag:
-                match = re.search(r"var is_r18\s*=\s*parseInt\(\s*\"(\d+)\"\s*\)", script_tag.text)
-                if match:
-                    category = int(match.group(1))
+        # **筛选并保存**
+        if category == 1:
+            r15_cnt += 1
+            f.write(f'{category} {title} {score} {url}\n')
+        elif category == 2:
+            r18_cnt += 1
+            f.write(f'{category} {title} {score} {url}\n')
 
-            # 只保留 R15 (1) 和 R18 (2) 的漫画
-            if category == 1:
-                r15_cnt += 1
-                f.write(f'{category} {title} {score} {url}\n')
-            elif category == 2:
-                r18_cnt += 1
-                f.write(f'{category} {title} {score} {url}\n')
+        print(f'\rNo. {i} tested | R18: {r18_cnt} | R15: {r15_cnt}', end='', flush=True)
         
-        print('\r', end='')
-        print(f'id {idx} tested / {r18_cnt} r18 / {r15_cnt} r15', end='')
-        time.sleep(random.uniform(0.5, 1))
+        time.sleep(random.uniform(0.5, 1))  # **避免请求过快**
+        i += 1
